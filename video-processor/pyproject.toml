@@ -1,0 +1,27 @@
+[project]
+name = "video-processor"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "easyocr>=1.6.0",
+    "levenshtein~=0.27.1",
+    "numpy>=1.21.0",
+    "opencv-python>=4.5.0",
+    "pillow>=8.0.0",
+    "pysrt>=1.1.0",
+    "pytesseract>=0.3.7",
+    "python-dotenv>=1.2.1",
+    "python-levenshtein>=0.12.0",
+    "scenedetect>=0.6.0",
+    "scikit-image>=0.18.0",
+    "tqdm>=4.62.0",
+]
+
+[project.scripts]
+video-processor = "main:main"
+
+[tool.uv]
+package = false
+

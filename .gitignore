@@ -1,0 +1,9 @@
+node_modules/
+.venv/
+__pycache__/
+.DS_Store
+*.log
+.idea/
+d1_import.sql
+*.sql
+wrangler.toml

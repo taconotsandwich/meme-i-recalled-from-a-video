@@ -1,0 +1,25 @@
+{
+  "name": "image-search-api-server",
+  "version": "1.0.0",
+  "description": "Cloudflare Worker for Image Search (Discord Interactions)",
+  "type": "module",
+  "main": "src/index.ts",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy && npm run register-commands",
+    "register-commands": "curl \"https://meme-image-search.taconotsandwich.workers.dev/register-commands?secret=$ADMIN_SECRET\""
+  },
+  "dependencies": {
+    "discord-interactions": "^3.4.0",
+    "hono": "^4.0.0"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20240320.1",
+    "@types/node": "^20.11.0",
+    "@typescript-eslint/eslint-plugin": "^7.1.0",
+    "@typescript-eslint/parser": "^7.1.0",
+    "eslint": "^8.57.0",
+    "typescript": "^5.4.0",
+    "wrangler": "^4.56.0"
+  }
+}

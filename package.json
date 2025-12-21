@@ -1,0 +1,12 @@
+{
+  "name": "meme-i-recalled-from-a-video-monorepo",
+  "private": true,
+  "workspaces": [
+    "image-search-api-server"
+  ],
+  "scripts": {
+    "server:dev": "npm run dev -w image-search-api-server",
+    "server:build": "npm run build -w image-search-api-server",
+    "processor:run": "cd video-processor && uv run main.py"
+  }
+}
