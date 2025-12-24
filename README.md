@@ -46,12 +46,12 @@ Upload the processed frames to R2 and sync the metadata to D1:
 
 ## Development Commands
 
-| Task                 | Command                 |
-|:---------------------|:------------------------|
-| Run API Locally      | `npm run server:dev`    |
-| Build API            | `npm run server:build`  |
-| Process Video        | `npm run processor:run -- <args>` |
-| Full Deployment      | `./deploy.sh`           |
+| Task            | Command                           |
+|:----------------|:----------------------------------|
+| Run API Locally | `npm run server:dev`              |
+| Build API       | `npm run server:build`            |
+| Process Video   | `npm run processor:run -- <args>` |
+| Full Deployment | `./deploy.sh`                     |
 
 ## License
 MIT
