@@ -78,9 +78,10 @@ app.post('/api/discord/webhook', async (c) => {
             if (images.length === 0) {
               responseContent = { content: `No images found for "${query}"` };
             } else if (images.length === 1) {
+              const fullImageUrl = new URL(`/img/${images[0].image_url}`, c.req.url).toString();
               responseContent = { 
                 content: `Found: ${images[0].subtitle}`, 
-                embeds: [{ image: { url: images[0].image_url } }] 
+                embeds: [{ image: { url: fullImageUrl } }] 
               };
             } else {
               const list = images.map(img => `- ${img.subtitle} (ID: ${img.id})`).join('\n');
@@ -93,9 +94,10 @@ app.post('/api/discord/webhook', async (c) => {
           const id = options?.find((o: any) => o.name === 'id')?.value;
           const image = await findImageBySerialNumber(c.env.DB, id);
           if (image) {
+            const fullImageUrl = new URL(`/img/${image.image_url}`, c.req.url).toString();
             responseContent = { 
               content: `ID: ${image.id} - ${image.subtitle}`, 
-              embeds: [{ image: { url: image.image_url } }] 
+              embeds: [{ image: { url: fullImageUrl } }] 
             };
           } else {
             responseContent = { content: `No image found with ID ${id}` };

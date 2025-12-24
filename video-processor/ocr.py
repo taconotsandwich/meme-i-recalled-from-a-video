@@ -1,10 +1,10 @@
 """OCR module for text extraction from video frames."""
 import cv2
 import re
-import pytesseract
 import warnings
-from PIL import Image
 import Levenshtein
+import numpy as np
+from opencc import OpenCC
 
 # Suppress Torch pin_memory warning on MPS (M1/M2/M3/M4 Macs)
 warnings.filterwarnings("ignore", message=".*pin_memory.*device pinned memory won't be used.*")
@@ -12,82 +12,103 @@ warnings.filterwarnings("ignore", message=".*pin_memory.*device pinned memory wo
 # Global variable for EasyOCR reader (lazy loading)
 reader_easyocr = None
 
+def get_easyocr_langs(lang_string):
+    """Map standard language codes to EasyOCR codes."""
+    mapping = {
+        'eng': 'en', 'en': 'en',
+        'chi_tra': 'ch_tra', 'chi_sim': 'ch_sim', 'zh': 'ch_sim',
+        'chi_sim_to_tra': 'ch_sim',
+        'jpn': 'ja', 'ja': 'ja',
+        'kor': 'ko', 'ko': 'ko',
+        'fra': 'fr', 'fr': 'fr',
+        'deu': 'de', 'de': 'de',
+        'spa': 'es', 'es': 'es',
+        'ita': 'it', 'it': 'it',
+    }
+    parts = lang_string.split('+')
+    return [mapping.get(l, l) for l in parts]
 
-def extract_text_from_frame(frame, region='all', lang='eng', ocr_engine='tesseract'):
-    """
-    Extract text from a frame using OCR, optionally focusing on a region and language.
+def get_reader(lang='eng'):
+    global reader_easyocr
+    if reader_easyocr is None:
+        import easyocr
+        easy_langs = get_easyocr_langs(lang)
+        reader_easyocr = easyocr.Reader(easy_langs, gpu=True)
+    return reader_easyocr
 
-    Args:
-        frame: frame to extract text from
-        region: 'all', 'top', or 'bottom'
-        lang: Tesseract language code
-        ocr_engine: 'tesseract' or 'easyocr'
-    """
-    # Crop frame if needed
-    if region == 'top':
-        frame = frame[:frame.shape[0] // 3, :, :]
-    elif region == 'bottom':
-        frame = frame[-frame.shape[0] // 3:, :, :]
+def extract_full_ocr_results(frame, lang='eng'):
+    """Extract all text with bounding boxes from a frame."""
+    reader = get_reader(lang)
+    rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+    return reader.readtext(rgb)
 
-    if ocr_engine == 'tesseract':
-        # Convert frame to grayscale
-        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        # Apply thresholding to get better text contrast
-        _, thresh = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-        # Convert to PIL Image for pytesseract
-        pil_image = Image.fromarray(thresh)
-        # Extract text using pytesseract
-        text = pytesseract.image_to_string(pil_image, lang=lang)
+def calculate_region_from_coords(y_coords, h):
+    """Calculate the best y-range from collected y-coordinates."""
+    if not y_coords:
+        return (int(h * 0.66), h)
+
+    bins = np.zeros(h)
+    for y_min, y_max in y_coords:
+        bins[int(max(0, y_min)):int(min(h, y_max))] += 1
+
+    max_freq = np.max(bins)
+    if max_freq == 0:
+        return (int(h * 0.66), h)
+        
+    threshold = max_freq * 0.5
+    active_indices = np.where(bins >= threshold)[0]
+    
+    if len(active_indices) == 0:
+        return (int(h * 0.66), h)
+
+    y_start = int(max(0, np.min(active_indices) - 10))
+    y_end = int(min(h, np.max(active_indices) + 10))
+    
+    if (y_end - y_start) < h * 0.05 or (y_end - y_start) > h * 0.8:
+        return (int(h * 0.66), h)
+
+    return (y_start, y_end)
+
+def filter_ocr_results_by_region(results, region, lang='eng'):
+    """Filter OCR results to only include text within the specified y-region."""
+    if region == 'all':
+        text = ' '.join([r[1] for r in results]).strip()
     else:
-        global reader_easyocr
-        if reader_easyocr is None:
-            import easyocr
-            reader_easyocr = easyocr.Reader([lang], gpu=True)
-        # EasyOCR expects RGB
-        rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        result = reader_easyocr.readtext(rgb, detail=0)
-        text = ' '.join(result)
-
-    # Clean up the text
-    text = ' '.join(text.split())  # Remove extra whitespace
-    return text.strip()
-
+        y_start, y_end = region
+        filtered_text = []
+        for (bbox, text_block, prob) in results:
+            if prob > 0.3:
+                y_min = min(bbox[0][1], bbox[1][1], bbox[2][1], bbox[3][1])
+                y_max = max(bbox[0][1], bbox[1][1], bbox[2][1], bbox[3][1])
+                # Check if the text block overlaps significantly with our target region
+                overlap_y_start = max(y_start, y_min)
+                overlap_y_end = min(y_end, y_max)
+                if overlap_y_end > overlap_y_start:
+                    overlap_height = overlap_y_end - overlap_y_start
+                    text_height = y_max - y_min
+                    if text_height > 0 and (overlap_height / text_height) > 0.5:
+                        filtered_text.append(text_block)
+        text = ' '.join(filtered_text).strip()
+    
+    # Handle Simplified to Traditional translation if requested
+    if lang == 'chi_sim_to_tra' and text:
+        converter = OpenCC('s2t')
+        text = converter.convert(text)
+        
+    return text
 
 def normalize_text(text):
-    """Normalize text for comparison purposes."""
-    if not text or len(text.strip()) < 2:  # More lenient - allow shorter text
+    if not text or len(text.strip()) < 2:
         return ''
-    # Remove some punctuation but keep more characters for Chinese
     normalized = re.sub(r'[^\w\s\u4e00-\u9fff]', '', text).strip().lower()
-    # Remove extra whitespace
-    normalized = ' '.join(normalized.split())
-    # Much more lenient - only filter extremely short results
-    if len(normalized) < 2:
-        return ''
-    return normalized
-
+    return ' '.join(normalized.split())
 
 def is_text_significantly_different(a, b, threshold=0.85):
-    """Check if two texts are significantly different based on Levenshtein distance."""
-    # If both are empty, they're the same
-    if not a and not b:
-        return False
-    # If one is empty and the other isn't, they're different
-    if not a or not b:
-        return True
-    # Calculate similarity ratio - much more lenient threshold
-    ratio = Levenshtein.ratio(a, b)
-    return ratio < threshold  # True if less than 85% similar
-
+    if not a and not b: return False
+    if not a or not b: return True
+    return Levenshtein.ratio(a, b) < threshold
 
 def has_meaningful_text(text):
-    """Check if a text contains meaningful content - much more lenient"""
-    if not text or len(text.strip()) < 2:  # Much more permissive
-        return False
-
+    if not text: return False
     normalized = normalize_text(text)
-    if not normalized:
-        return False
-
-    # Much more lenient - any text with 2+ characters is considered meaningful
     return len(normalized) >= 2
